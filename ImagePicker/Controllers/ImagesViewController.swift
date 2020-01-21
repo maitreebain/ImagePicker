@@ -6,7 +6,29 @@
 //  Copyright © 2020 Alex Paul. All rights reserved.
 //
 
+//Topics covered today:
+
+/*
+ 
+ * Used UIAlertController to present an action sheet
+ * Accessed the user's photo library
+ * Accessed the user's camera
+ * Add the NSCameraUsageDescription key to the info.plist
+ * Resized an UIImage using UIGraphicsRender
+ * Implemented UILongPressGestureRecognizer() to present an action sheet for deletion
+ * Maintained the aspect Ratio of the image using AVMakeRect()
+ * Custom Delegation to notify the ImagesViewsController about long press from press from the ImageCell
+ * Persisted image objects to the documents directory (create, read, delete)
+ 
+ Other features we can add:
+ - Share an image along with text to a user via SMS, fb, etc.
+ - Automatically save an original image taken to the photo library -> (UIImageWriteToPhotosAlbum)
+ -
+ 
+ */
+
 import UIKit
+import AVFoundation
 
 class ImagesViewController: UIViewController {
     
@@ -43,15 +65,31 @@ class ImagesViewController: UIViewController {
     }
     
     private func appendNewPhotoToCollection() {
-        guard let image = selectedImage,
+        guard let image = selectedImage else {
             //convert uiimage to data
-            let imageData = image.jpegData(compressionQuality: 1.0) else {
                 print("image is nil")
                 return
         }
         
+        print("original size: \(image.size)")
+        
+        //the size of resizing of the image
+        let size = UIScreen.main.bounds.size
+        
+        //we will maintain aspect ratio of the image
+        let rect = AVMakeRect(aspectRatio: image.size, insideRect: CGRect(origin: CGPoint.zero, size: size))
+        
+        //        resize image
+        let resizeImage = image.resizeImage(to: rect.size.width, height: rect.size.height)
+        
+        print("resized: \(resizeImage.size)")
+        
+        guard let resizedImageData = resizeImage.jpegData(compressionQuality: 1.0) else {
+            return
+        }
+        
         //create an ImageObject using the image selected
-        let imageObject = ImageObject(imageData: imageData, date: Date())
+        let imageObject = ImageObject(imageData: resizedImageData, date: Date())
         
         //insert new image Object into imageObjects
         imageObjects.insert(imageObject, at: 0)
@@ -62,7 +100,7 @@ class ImagesViewController: UIViewController {
         
         //persist imageObject to documents directory
         do{
-        try dataPersistence.create(item: imageObject)
+            try dataPersistence.create(item: imageObject)
         } catch {
             print("saving error")
         }
@@ -110,11 +148,15 @@ extension ImagesViewController: UICollectionViewDataSource {
     }
     
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+        //Step 4: creating custom delg - must have an instance of object B
         guard let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "imageCell", for: indexPath) as? ImageCell else {
             fatalError("could not downcast to an ImageCell")
         }
         let imageObject = imageObjects[indexPath.row]
         cell.configureCell(imageObject: imageObject)
+        //Step 4: creating custom delg - set delegate object
+        cell.delegate = self
+        
         return cell
     }
 }
@@ -144,6 +186,44 @@ extension ImagesViewController: UIImagePickerControllerDelegate, UINavigationCon
         dismiss(animated: true)
     }
     
+}
+
+//Step 4: creating custom delg - conform to delegate
+extension ImagesViewController: ImageCellDelegate {
+    func didLongPress(_ imageCell: ImageCell) {
+        
+        guard let indexPath = collectionView.indexPath(for: imageCell) else {
+            return
+        }
+        //present an action sheet
+        
+        //actions: delete + cancel
+        let alertController = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+        let deleteAction = UIAlertAction(title: "Delete", style: .destructive) { [weak self] alertAction in
+            self?.deleteImageObject(indexPath: indexPath)
+        }
+        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
+        alertController.addAction(deleteAction)
+        alertController.addAction(cancelAction)
+        present(alertController, animated: true)
+        
+    }
+    
+    private func deleteImageObject(indexPath: IndexPath) {
+        //delete image object from documents directory
+        do {
+            //delete image object from documents directory
+            try dataPersistence.delete(event: indexPath.row)
+            
+            //delete imageObject from imagesObjects
+            imageObjects.remove(at: indexPath.row)
+            
+            //delete cell from collection view
+            collectionView.deleteItems(at: [indexPath])
+        } catch {
+            print("deletion error: \(error)")
+        }
+    }
 }
 
 // more here: https://nshipster.com/image-resizing/
