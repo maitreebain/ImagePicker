@@ -31,6 +31,15 @@ class ImagesViewController: UIViewController {
         collectionView.delegate = self
         //set image delegate for imagePickerController
         imagePickerController.delegate = self
+        loadImageObjects()
+    }
+    
+    private func loadImageObjects() {
+        do {
+            imageObjects = try dataPersistence.loadEvents()
+        } catch {
+            print("loading objects error \(error)")
+        }
     }
     
     private func appendNewPhotoToCollection() {
